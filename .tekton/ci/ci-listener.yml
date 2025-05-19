@@ -427,6 +427,10 @@ spec:
             value: $(params.job-retrylimit)
           - name: wait-timeout
             value: $(params.wait-timeout)
+          - name: signer
+            value: $(params.signer)
+          - name: vault-name
+            value: $(params.vault-name)
         workspaces:
           - name: pipeline-ws
             persistentVolumeClaim:

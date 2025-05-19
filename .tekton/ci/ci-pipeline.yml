@@ -231,8 +231,10 @@ spec:
     # For image signing
     - name: signer
       description: current signer
+      default: "ibmcloud"
     - name: vault-name
       description: the key protect instance name
+      default: "keyprotect"
   workspaces:
     - name: pipeline-ws
   tasks:
