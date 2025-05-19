@@ -227,6 +227,12 @@ spec:
     - name: job-retrylimit
       description: The number of times to rerun an instance of the job before the job is marked as failed.
       default: "3"
+
+    # For image signing
+    - name: signer
+      description: current signer
+    - name: vault-name
+      description: the key protect instance name
   workspaces:
     - name: pipeline-ws
   tasks:
@@ -624,7 +630,37 @@ spec:
       workspaces:
         - name: source
           workspace: pipeline-ws
-
+    - name: sign-image
+      runAfter: [containerize]
+      taskRef:
+        name: signing-dct-sign
+      params:
+        - name: image-repository
+          value: $(tasks.containerize.results.image-repository)
+        - name: image-digest
+          value: $(tasks.containerize.results.image-digest)
+        - name: image-tags
+          value: $(tasks.containerize.results.image-tags)
+        - name: signer
+          value: $(params.signer)
+        - name: vault-region
+          value: $(params.region)
+        - name: vault-resource-group
+          value: $(params.resource-group)
+        - name: vault-name
+          value: $(params.vault-name)
+        - name: ibmcloud-api
+          value: $(params.ibmcloud-api)
+        - name: continuous-delivery-context-secret
+          value: "secure-properties"
+        - name: apikey-secret-key
+          value: "apikey"
+        - name: docker-client-image
+          value: "docker"
+        - name: pipeline-debug
+          value: "0"
+        - name: commons-hosted-region
+          value: "https://raw.githubusercontent.com/open-toolchain/commons/master"
     - name: define-registry-secret-context
       runAfter: [containerize]
       params:

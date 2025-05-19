@@ -1,0 +1,76 @@
+# Task: Sign container images using Cosign
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: cosign-sign
+spec:
+  description: |
+    Sign container images using Cosign.
+    This task supports signing with key pairs or key pairs with passwords.
+  params:
+    - name: image-url
+      description: Container image URL to sign
+      type: string
+    - name: cosign-key
+      description: Cosign private key (PEM format)
+      type: string
+    - name: cosign-key-password
+      description: Cosign private key password (if any)
+      type: string
+      default: ""
+    - name: registry-username
+      description: Container registry username (if authentication is required)
+      type: string
+      default: ""
+    - name: registry-password
+      description: Container registry password (if authentication is required)
+      type: string
+      default: ""
+    - name: annotations
+      description: Annotations to add to the signature (JSON format)
+      type: string
+      default: "{}"
+  steps:
+    - name: sign-image
+      image: gcr.io/projectsigstore/cosign:v1.13.1
+      env:
+        - name: COSIGN_PASSWORD
+          value: $(params.cosign-key-password)
+        - name: REGISTRY_USERNAME
+          value: $(params.registry-username)
+        - name: REGISTRY_PASSWORD
+          value: $(params.registry-password)
+      script: |
+        #!/usr/bin/env sh
+        set -e
+        
+        # Login to registry if credentials are provided
+        if [ -n "$REGISTRY_USERNAME" ] && [ -n "$REGISTRY_PASSWORD" ]; then
+          echo "Logging in to container registry..."
+          echo $REGISTRY_PASSWORD | docker login -u $REGISTRY_USERNAME --password-stdin $(echo $(params.image-url) | cut -d'/' -f1)
+        fi
+        
+        # Store private key to file
+        echo "Writing private key to temporary file..."
+        echo "$(params.cosign-key)" > /tmp/cosign.key
+        
+        # Prepare annotation parameters
+        ANNOTATION_ARGS=""
+        ANNOTATIONS=$(params.annotations)
+        if [ "$ANNOTATIONS" != "{}" ]; then
+          echo "Processing annotations..."
+          # Convert JSON to cosign annotation format
+          for key in $(echo $ANNOTATIONS | jq -r 'keys[]'); do
+            value=$(echo $ANNOTATIONS | jq -r --arg k "$key" '.[$k]')
+            ANNOTATION_ARGS="$ANNOTATION_ARGS --annotation=$key=$value"
+          done
+        fi
+        
+        # Sign the image with provided annotations and key
+        echo "Signing image with Cosign: $(params.image-url)"
+        cosign sign --key /tmp/cosign.key $ANNOTATION_ARGS $(params.image-url)
+        
+        # Clean up temporary key file
+        rm -f /tmp/cosign.key
+        
+        echo "Image signing completed: $(params.image-url)"

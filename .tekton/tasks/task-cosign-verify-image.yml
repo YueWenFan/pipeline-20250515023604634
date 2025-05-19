@@ -1,0 +1,76 @@
+# Task: Verify container image signatures using Cosign
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: cosign-verify
+spec:
+  description: |
+    Verify container image signatures created with Cosign.
+    This task supports verification using a public key.
+  params:
+    - name: image-url
+      description: Container image URL to verify
+      type: string
+    - name: cosign-public-key
+      description: Cosign public key (PEM format)
+      type: string
+    - name: registry-username
+      description: Container registry username (if authentication is required)
+      type: string
+      default: ""
+    - name: registry-password
+      description: Container registry password (if authentication is required)
+      type: string
+      default: ""
+    - name: expected-annotations
+      description: Annotations to verify (JSON format)
+      type: string
+      default: "{}"
+  steps:
+    - name: verify-image
+      image: gcr.io/projectsigstore/cosign:v1.13.1
+      env:
+        - name: REGISTRY_USERNAME
+          value: $(params.registry-username)
+        - name: REGISTRY_PASSWORD
+          value: $(params.registry-password)
+      script: |
+        #!/usr/bin/env sh
+        set -e
+        
+        # Login to registry if credentials are provided
+        if [ -n "$REGISTRY_USERNAME" ] && [ -n "$REGISTRY_PASSWORD" ]; then
+          echo "Logging in to container registry..."
+          echo $REGISTRY_PASSWORD | docker login -u $REGISTRY_USERNAME --password-stdin $(echo $(params.image-url) | cut -d'/' -f1)
+        fi
+        
+        # Store public key to file
+        echo "Writing public key to temporary file..."
+        echo "$(params.cosign-public-key)" > /tmp/cosign.pub
+        
+        # Prepare annotation verification parameters
+        ANNOTATION_ARGS=""
+        EXPECTED_ANNOTATIONS=$(params.expected-annotations)
+        if [ "$EXPECTED_ANNOTATIONS" != "{}" ]; then
+          echo "Processing annotation verification..."
+          # Convert JSON to cosign annotation format
+          for key in $(echo $EXPECTED_ANNOTATIONS | jq -r 'keys[]'); do
+            value=$(echo $EXPECTED_ANNOTATIONS | jq -r --arg k "$key" '.[$k]')
+            ANNOTATION_ARGS="$ANNOTATION_ARGS --annotations=$key=$value"
+          done
+        fi
+        
+        # Verify image signature
+        echo "Verifying image signature with Cosign: $(params.image-url)"
+        cosign verify --key /tmp/cosign.pub $ANNOTATION_ARGS $(params.image-url)
+        
+        # Output result
+        if [ $? -eq 0 ]; then
+          echo "Image signature verification successful: $(params.image-url)"
+        else
+          echo "Image signature verification failed: $(params.image-url)"
+          exit 1
+        fi
+        
+        # Clean up temporary key file
+        rm -f /tmp/cosign.pub
