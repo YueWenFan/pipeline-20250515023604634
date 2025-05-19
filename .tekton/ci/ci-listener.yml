@@ -238,6 +238,13 @@ spec:
       description: The number of times to rerun an instance of the job before the job is marked as failed.
       default: "3"
 
+    # For image signing
+    - name: signer
+      description: current signer
+      default: "oneten"
+    - name: vault-name
+      description: the key protect instance name
+      default: "oneten"
   resourcetemplates:
     - apiVersion: v1
       kind: PersistentVolumeClaim
